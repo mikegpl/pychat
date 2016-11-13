@@ -1,14 +1,13 @@
 import socket
 import threading
 import queue
-import time
 
-
+# think about locks
 class Server(threading.Thread):
     def __init__(self, host, port):
         super().__init__(daemon=True)
 
-        # socket stuff
+        # socket init
         self.host = host
         self.port = port
         self.buffer_size = 1024
@@ -19,11 +18,12 @@ class Server(threading.Thread):
         self.login_list = {}
         self.queue = queue.Queue()
 
-        # How does socket.bind() work?
+        # for quitting
+        self.exit = ''
+
+        # socket setup
         self.sock.bind((str(self.host), int(self.port)))
-        # How to choose socket.listen() parameters?
         self.sock.listen(10)
-        # What is and how does work socket.setblocking()
         self.sock.setblocking(False)
 
         # threads
@@ -39,13 +39,13 @@ class Server(threading.Thread):
         sender.start()
 
         while True:
-            message = input("->")
+            message = input()
             if message == "quit":
                 self.sock.close()
                 break
 
     def listen(self):
-        print("Initiated listener thread")
+        print('Initiated listener thread')
         while True:
             try:
                 connection, adress = self.sock.accept()
@@ -56,14 +56,11 @@ class Server(threading.Thread):
                 pass
 
     def receive(self):
-        print("Initiated receiver thread")
+        print('Initiated receiver thread')
         while True:
-
-            # Here probably would go selectors
             if len(self.connection_list) > 0:
                 for connection in self.connection_list:
                     try:
-                        # Selectors go here? If sth is ready to be received from client:
                         data = connection.recv(self.buffer_size)
 
                         # received data processing
@@ -88,15 +85,13 @@ class Server(threading.Thread):
                                 # Update list of active users
                                 self.update_login_list()
                             elif message[0] == 'msg' and message[2] != 'all':
-                                self.queue.put(('all', message[1], data))
-
-                            else:
                                 self.queue.put((message[2], message[1], data))
+                            else:
+                                self.queue.put(('all', message[1], data))
 
                     except:
                         # it must be pass, otherwise it would ~endlessly do stuff
                         pass
-            time.sleep(0.050)
 
     def update_login_list(self):
         logins = 'login'
@@ -106,17 +101,17 @@ class Server(threading.Thread):
         self.queue.put(('all', 'server', logins.encode('utf-8')))
 
     def send(self):
+        print('Initiated sender thread')
         while True:
             if not self.queue.empty():
                 target, origin, data = self.queue.get()
                 if target == 'all':
                     self.send_to_all(origin, data)
                 else:
-                    self.send_to_one(target, origin, data)
+                    self.send_to_one(target, data)
                 self.queue.task_done()
 
     def send_to_all(self, origin, data):
-        # Here probably would go selectors (again)
         if origin != 'server':
             origin_address = self.login_list[origin]
         else:
@@ -127,22 +122,21 @@ class Server(threading.Thread):
                 try:
                     connection.send(data)
                 except:
-                    self.connection_list.remove(connection)
-                    for login, address in self.login_list:
-                        if address == connection:
-                            del self.login_list[login]
-                    self.update_login_list()
+                    self.remove_connection(connection)
 
     def send_to_one(self, target, data):
+        target_address = self.login_list[target]
         try:
-            target_address = self.login_list[target]
             target_address.send(data)
         except:
-            self.connection_list.remove(target)
-            for login, address in self.login_list.items():
-                if address == target:
-                    del self.login_list[login]
-            self.update_login_list()
+            self.remove_connection(target_address)
+
+    def remove_connection(self, connection):
+        self.connection_list.remove(connection)
+        for login, address in self.login_list.items():
+            if address == connection:
+                del self.login_list[login]
+        self.update_login_list()
 
 
 server = Server('localhost', 8888)
