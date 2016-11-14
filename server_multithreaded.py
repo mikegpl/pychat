@@ -1,11 +1,8 @@
 import socket
 import threading
 import queue
+import time
 
-
-# Todo - don't allow to select a login that is currently active on server login list
-# Done - now every time after login, whenever user chooses nickname that is already in use,
-# his nickname will have '#' appended until it is unique
 class Server(threading.Thread):
     def __init__(self, host, port):
         super().__init__(daemon=True)
@@ -61,6 +58,7 @@ class Server(threading.Thread):
                 pass
             finally:
                 self.lock.release()
+            time.sleep(0.1)
 
     def receive(self):
         print('Initiated receiver thread')
@@ -125,6 +123,7 @@ class Server(threading.Thread):
                 else:
                     self.send_to_one(target, data)
                 self.queue.task_done()
+
 
     def send_to_all(self, origin, data):
         if origin != 'server':
