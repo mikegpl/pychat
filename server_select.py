@@ -20,17 +20,23 @@ class Server(object):
         self.sock.listen(10)
         self.sock.setblocking(False)
 
-        # select setup
+        # select setup()
 
         self.inputs = [self.sock]
         self.outputs = []
         self.message_queues = {}
+
+        # for exiting
         signal.signal(signal.SIGINT, self.sighandler)
 
+
+    # methods
+
+
     def sighandler(self, signum, frame):
-        # Close the server
+        # close the server
         print('Shutting down server...')
-        # Close existing client sockets
+        # close existing client sockets
         for connection in self.outputs:
             connection.close()
         self.sock.close()
@@ -43,8 +49,9 @@ class Server(object):
             except:
                 break
 
+            # readable sockets
             for socket in read:
-                # 1 processing server socket
+                # 1. processing server socket
                 if socket is self.sock:
                     connection, address = socket.accept()
                     print("New connection from ", address)
@@ -54,7 +61,7 @@ class Server(object):
                     self.outputs.append(connection)
                     self.message_queues[connection] = queue.Queue()
 
-                # 2 processing client socket
+                # 2. processing client socket
                 else:
                     data = socket.recv(self.buffer_size)
                     if data:
@@ -110,11 +117,13 @@ class Server(object):
 
                         self.update_login_list()
 
+            # writeable sockets
             for socket in write:
                 if not self.message_queues[socket].empty():
                     data = self.message_queues[socket].get()
                     socket.send(data)
 
+            # exceptions
             for socket in exceptional:
                 self.inputs.remove(socket)
                 if socket in self.outputs:

@@ -2,7 +2,6 @@ import socket
 import threading
 import queue
 
-# think about locks
 class Server(threading.Thread):
     def __init__(self, host, port):
         super().__init__(daemon=True)
@@ -30,6 +29,7 @@ class Server(threading.Thread):
         listener = threading.Thread(target=self.listen)
         receiver = threading.Thread(target=self.receive)
         sender = threading.Thread(target=self.send)
+        self.lock = threading.RLock()
 
         listener.daemon = True
         listener.start()
@@ -48,12 +48,15 @@ class Server(threading.Thread):
         print('Initiated listener thread')
         while True:
             try:
+                self.lock.acquire()
                 connection, adress = self.sock.accept()
                 connection.setblocking(False)
                 if connection not in self.connection_list:
                     self.connection_list.append(connection)
             except:
                 pass
+            finally:
+                self.lock.release()
 
     def receive(self):
         print('Initiated receiver thread')
@@ -61,37 +64,37 @@ class Server(threading.Thread):
             if len(self.connection_list) > 0:
                 for connection in self.connection_list:
                     try:
+                        self.lock.acquire()
                         data = connection.recv(self.buffer_size)
-
-                        # received data processing
-                        if data:
-
-                            message = data.decode('utf-8')
-                            # at most 4 splits (don't split the message if it contains ;)
-                            message = message.split(";", 3)
-
-                            # do stuff with message
-                            if message[0] == 'login':
-                                self.login_list[message[1]] = connection
-                                print(message[1] + ' has logged in')
-
-                                # Update list of active users
-                                self.update_login_list()
-                            elif message[0] == 'logout':
-                                self.connection_list.remove(self.login_list[message[1]])
-                                del self.login_list[message[1]]
-                                print(message[1] + ' has logged out')
-
-                                # Update list of active users
-                                self.update_login_list()
-                            elif message[0] == 'msg' and message[2] != 'all':
-                                self.queue.put((message[2], message[1], data))
-                            elif message[0] == 'msg':
-                                self.queue.put(('all', message[1], data))
-
                     except:
-                        # it must be pass, otherwise it would ~endlessly do stuff
-                        pass
+                        data = None
+                    finally:
+                        self.lock.release()
+
+                    # process received data
+                    if data:
+                        message = data.decode('utf-8')
+                        # at most 4 splits (don't split the message if it contains ;)
+                        message = message.split(";", 3)
+
+                        # do stuff with message
+                        if message[0] == 'login':
+                            self.login_list[message[1]] = connection
+                            print(message[1] + ' has logged in')
+
+                            # Update list of active users
+                            self.update_login_list()
+                        elif message[0] == 'logout':
+                            self.connection_list.remove(self.login_list[message[1]])
+                            del self.login_list[message[1]]
+                            print(message[1] + ' has logged out')
+
+                            # Update list of active users
+                            self.update_login_list()
+                        elif message[0] == 'msg' and message[2] != 'all':
+                            self.queue.put((message[2], message[1], data))
+                        elif message[0] == 'msg':
+                            self.queue.put(('all', message[1], data))
 
     def update_login_list(self):
         logins = 'login'
@@ -120,16 +123,22 @@ class Server(threading.Thread):
         for connection in self.connection_list:
             if connection != origin_address:
                 try:
+                    self.lock.acquire()
                     connection.send(data)
                 except:
                     self.remove_connection(connection)
+                finally:
+                    self.lock.release()
 
     def send_to_one(self, target, data):
         target_address = self.login_list[target]
         try:
+            self.lock.acquire()
             target_address.send(data)
         except:
             self.remove_connection(target_address)
+        finally:
+            self.lock.release()
 
     def remove_connection(self, connection):
         self.connection_list.remove(connection)
@@ -138,6 +147,7 @@ class Server(threading.Thread):
                 del self.login_list[login]
                 break
         self.update_login_list()
+
 
 if __name__ == '__main__':
     server = Server('localhost', 8888)
