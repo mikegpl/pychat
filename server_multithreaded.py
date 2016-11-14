@@ -10,7 +10,7 @@ class Server(threading.Thread):
         # socket init
         self.host = host
         self.port = port
-        self.buffer_size = 1024
+        self.buffer_size = 2048
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # processing connections
@@ -64,7 +64,7 @@ class Server(threading.Thread):
                         data = connection.recv(self.buffer_size)
 
                         # received data processing
-                        if data and len(data.decode('utf-8')) > 1:
+                        if data:
 
                             message = data.decode('utf-8')
                             # at most 4 splits (don't split the message if it contains ;)
@@ -86,7 +86,7 @@ class Server(threading.Thread):
                                 self.update_login_list()
                             elif message[0] == 'msg' and message[2] != 'all':
                                 self.queue.put((message[2], message[1], data))
-                            else:
+                            elif message[0] == 'msg':
                                 self.queue.put(('all', message[1], data))
 
                     except:
@@ -136,7 +136,8 @@ class Server(threading.Thread):
         for login, address in self.login_list.items():
             if address == connection:
                 del self.login_list[login]
+                break
         self.update_login_list()
 
-
-server = Server('localhost', 8888)
+if __name__ == '__main__':
+    server = Server('localhost', 8888)

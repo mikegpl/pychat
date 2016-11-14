@@ -33,7 +33,7 @@ class Client(threading.Thread):
 
         while not self.shutdown:
             message = input()
-            if message != 'quit':
+            if message != 'quit' and message != 'logout':
                 try:
                     self.send(message)
                 except:
