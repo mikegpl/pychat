@@ -4,6 +4,9 @@ import queue
 import signal
 
 
+# Todo - don't allow to select a login that is currently active on server login list
+# Done - now every time after login, whenever user chooses nickname that is already in use,
+# his nickname will have '#' appended until it is unique
 class Server(object):
     def __init__(self, host, port):
         # socket init
@@ -28,7 +31,6 @@ class Server(object):
 
         # for exiting
         signal.signal(signal.SIGINT, self.sighandler)
-
 
     # methods
 
@@ -71,6 +73,14 @@ class Server(object):
                         # processing data
                         # 1) login;nick
                         if message[0] == 'login':
+                            tmp_login = message[1]
+                            while message[1] in self.login_list:
+                                message[1] += '#'
+                            if tmp_login != message[1]:
+                                prompt = 'msg;' + message[1] + ';' + message[1] + ';Login ' + tmp_login \
+                                         + ' already in use. Your login changed to ' + message[1]
+                                self.message_queues[socket].put(prompt.encode('utf-8'))
+
                             self.login_list[message[1]] = socket
                             print(message[1] + ' has logged in')
                             # Update list of active users, send it to clients
@@ -119,9 +129,10 @@ class Server(object):
 
             # writeable sockets
             for socket in write:
-                if not self.message_queues[socket].empty():
-                    data = self.message_queues[socket].get()
-                    socket.send(data)
+                if socket in self.inputs:
+                    if not self.message_queues[socket].empty():
+                        data = self.message_queues[socket].get()
+                        socket.send(data)
 
             # exceptions
             for socket in exceptional:

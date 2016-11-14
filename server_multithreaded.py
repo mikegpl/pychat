@@ -2,6 +2,10 @@ import socket
 import threading
 import queue
 
+
+# Todo - don't allow to select a login that is currently active on server login list
+# Done - now every time after login, whenever user chooses nickname that is already in use,
+# his nickname will have '#' appended until it is unique
 class Server(threading.Thread):
     def __init__(self, host, port):
         super().__init__(daemon=True)
@@ -79,6 +83,14 @@ class Server(threading.Thread):
 
                         # do stuff with message
                         if message[0] == 'login':
+                            tmp_login = message[1]
+                            while message[1] in self.login_list:
+                                message[1] += '#'
+                            if tmp_login != message[1]:
+                                prompt = 'msg;' + message[1] + ';' + message[1] + ';Login ' + tmp_login \
+                                         + ' already in use. Your login changed to ' + message[1]
+                                self.queue.put((message[1], message[1], prompt.encode('utf-8')))
+
                             self.login_list[message[1]] = connection
                             print(message[1] + ' has logged in')
 
