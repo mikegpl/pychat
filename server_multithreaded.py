@@ -3,6 +3,7 @@ import threading
 import queue
 import time
 
+
 class Server(threading.Thread):
     def __init__(self, host, port):
         super().__init__(daemon=True)
@@ -106,13 +107,6 @@ class Server(threading.Thread):
                         elif message[0] == 'msg':
                             self.queue.put(('all', message[1], data))
 
-    def update_login_list(self):
-        logins = 'login'
-        for login in self.login_list:
-            logins += ';' + login
-        logins += ';all'
-        self.queue.put(('all', 'server', logins.encode('utf-8')))
-
     def send(self):
         print('Initiated sender thread')
         while True:
@@ -124,6 +118,20 @@ class Server(threading.Thread):
                     self.send_to_one(target, data)
                 self.queue.task_done()
 
+    def remove_connection(self, connection):
+        self.connection_list.remove(connection)
+        for login, address in self.login_list.items():
+            if address == connection:
+                del self.login_list[login]
+                break
+        self.update_login_list()
+
+    def update_login_list(self):
+        logins = 'login'
+        for login in self.login_list:
+            logins += ';' + login
+        logins += ';all'
+        self.queue.put(('all', 'server', logins.encode('utf-8')))
 
     def send_to_all(self, origin, data):
         if origin != 'server':
@@ -150,14 +158,6 @@ class Server(threading.Thread):
             self.remove_connection(target_address)
         finally:
             self.lock.release()
-
-    def remove_connection(self, connection):
-        self.connection_list.remove(connection)
-        for login, address in self.login_list.items():
-            if address == connection:
-                del self.login_list[login]
-                break
-        self.update_login_list()
 
 
 if __name__ == '__main__':

@@ -1,10 +1,13 @@
 import socket
 import threading
-import time
+import queue
+import tkinter as tk
 
 
 class Client(threading.Thread):
     def __init__(self, host, port):
+
+        # sockety stuff
         super().__init__(daemon=True)
         self.host = host
         self.port = port
@@ -12,47 +15,67 @@ class Client(threading.Thread):
         self.sock.connect((str(self.host), int(self.port)))
         self.buffer_size = 1024
         self.shutdown = False
+        self.queue = queue.Queue()
 
-        # guiThread = threading.Thread(target=self.gui)
+        # gui stuff
+
+
+
+        # threads
+        self.lock = threading.RLock()
+        gui = threading.Thread(target=self.gui)
+        receiver = threading.Thread(target=self.receive)
+        sender = threading.Thread(target=self.send)
+
+        receiver.daemon = True
+        receiver.start()
+        gui.daemon = False
+        gui.start()
+        sender.daemon = True
+        sender.start()
+
         # guiThread.start()
-
-        receivingThread = threading.Thread(target=self.receive)
-
-        # What is and how does work thread.daemon?
-        receivingThread.daemon = True
-        receivingThread.start()
 
         self.login = input('Enter your login: ')
         try:
             message = 'login;' + self.login
-            self.send(message)
+            self.queue.put(message.encode('utf-8'))
         except:
             self.sock.close()
             self.shutdown = True
-
 
         while not self.shutdown:
             message = input()
             if message != 'quit' and message != 'logout':
                 try:
-                    self.send(message)
+                    self.queue.put(message.encode('utf-8'))
                 except:
                     self.sock.close()
-                    break
+                    self.shutdown = True
             else:
                 message = 'logout;' + self.login
                 try:
-                    self.send(message)
+                    self.queue.put(message.encode('utf-8'))
                 except:
                     pass
-                self.sock.close()
-                break
+                finally:
+                    self.sock.close()
+                self.shutdown = True
+
 
                 # sendingThread = threading.Thread(target=self.send)
                 # sendingThread.start()
 
     def gui(self):
         pass
+
+    def send(self):
+        while True:
+            if not self.queue.empty():
+                data = self.queue.get()
+                self.send_message(data)
+                self.queue.task_done()
+
 
     def receive(self):
         while True:
@@ -64,9 +87,15 @@ class Client(threading.Thread):
             except:
                 pass
 
-    def send(self, message):
-        data = message.encode('utf-8')
-        self.sock.send(data)
+    def send_message(self, data):
+        try:
+            self.lock.acquire()
+            self.sock.send(data)
+        except:
+            self.sock.close()
+        finally:
+            self.lock.release()
+
 
 
 client = Client('localhost', 8888)
