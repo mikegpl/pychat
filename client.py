@@ -7,6 +7,7 @@ from tkinter.scrolledtext import ScrolledText
 
 
 # Todo - work on too broad exception clauses
+# Todo - some refactoring, moving send button to the left of exit button
 class Client(threading.Thread):
     def __init__(self, host, port):
 
@@ -31,7 +32,11 @@ class Client(threading.Thread):
         self.prompt = None
         self.send_button = None
         self.exit_button = None
+        self.login_list_box = None
+
         self.login = ''
+        self.target = ''
+        self.login_list = []
 
         # threads
         self.lock = threading.RLock()
@@ -47,36 +52,17 @@ class Client(threading.Thread):
         sender.daemon = True
         sender.start()
 
-        # while not self.shutdown:
-        #     message = input()
-        #     if message != 'quit' and message != 'logout':
-        #         try:
-        #             self.queue.put(message.encode('utf-8'))
-        #         except:
-        #             self.shutdown = True
-        #     else:
-        #         message = 'logout;' + self.login
-        #         data = message.encode('utf-8')
-        #         try:
-        #             self.send_message(data)
-        #             self.root.quit()
-        #             self.root.destroy()
-        #         except:
-        #             pass
-        #         finally:
-        #             self.sock.close()
-        #             self.shutdown = True
-
     def gui(self):
 
         # login input
         self.login_root = tk.Tk()
         self.login_root.title("Login")
-        self.login_label = tk.Label(self.login_root, text='Enter your login')
+        self.login_label = tk.Label(self.login_root, text='Enter your login', width=20, font=('Helvetica', 13))
         self.login_label.pack(side=tk.LEFT)
-        self.login_entry = tk.Entry(self.login_root, width=15)
+        self.login_entry = tk.Entry(self.login_root, width=15, font=('Helvetica', 13))
+        self.login_entry.focus_set()
         self.login_entry.pack(side=tk.LEFT)
-        self.login_button = tk.Button(self.login_root, text='Submit')
+        self.login_button = tk.Button(self.login_root, text='Login', font=('Helvetica', 13))
         self.login_button.pack(side=tk.LEFT)
         self.login_button.bind('<Button-1>', self.get_login_event)
         self.login_root.mainloop()
@@ -85,32 +71,36 @@ class Client(threading.Thread):
 
         # main window config before login attempt
         self.root = tk.Tk()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.title("Python Chat")
-        frame = tk.Frame(self.root)
-        frame.pack()
-        self.messages_list = ScrolledText(frame, height=20, width=100)
-        self.messages_list.pack()
+        frame = tk.Frame(self.root, width=130)
+        frame.pack(anchor='w')
+        self.messages_list = ScrolledText(frame, height=20, width=100, font=('Helvetica', 13))
+        self.messages_list.pack(side=tk.LEFT)
         self.messages_list.insert(tk.END, 'Welcome to Python Chat\n')
         self.messages_list.configure(state='disabled')
+        self.login_list_box = tk.Listbox(frame, selectmode=tk.SINGLE, width=25, height=20, font=('Helvetica', 13),
+                                         exportselection=False)
+        self.login_list_box.bind('<<ListboxSelect>>', self.selected_login_event)
+        self.messages_list.pack(side=tk.LEFT)
+        self.login_list_box.pack(anchor='e', side=tk.LEFT)
 
-        outer_frame = tk.Frame(frame)
+        outer_frame = tk.Frame(self.root, width=130)
         outer_frame.pack(anchor='w')
-        self.prompt = tk.Label(outer_frame, text=self.login + ' >>')
-        self.text_entry = tk.Entry(outer_frame, width=80)
+        self.prompt = tk.Label(outer_frame, text=self.login + ' >>', font=('Helvetica', 13))
+        self.text_entry = tk.Entry(outer_frame, width=100, font=('Helvetica', 13))
         self.text_entry.focus_set()
         self.text_entry.bind(sequence='<Return>', func=self.send_entry)
-        self.send_button = tk.Button(outer_frame, text='Send')
+        self.send_button = tk.Button(outer_frame, text='Send', font=('Helvetica', 13))
         self.send_button.bind('<Button-1>', self.send_entry)
-        self.exit_button = tk.Button(outer_frame, text='Exit')
-        self.exit_button.bind('<Button-1>', self.exit)
+        self.exit_button = tk.Button(outer_frame, text='Exit', font=('Helvetica', 13))
+        self.exit_button.bind('<Button-1>', self.exit_event)
+
         self.prompt.pack(side=tk.LEFT)
         self.text_entry.pack(side=tk.LEFT)
-        self.exit_button.pack(side=tk.RIGHT)
-        self.send_button.pack(side=tk.RIGHT)
+        self.exit_button.pack( side=tk.LEFT)
+        self.send_button.pack(side=tk.LEFT)
 
-
-        # Todo - get list of other clients
-        # Todo - add catching event when pressed 'x' (exit) button
         try:
             message = 'login;' + self.login
             self.queue.put(message.encode('utf-8'))
@@ -119,6 +109,9 @@ class Client(threading.Thread):
 
         self.root.mainloop()
         self.root.destroy()
+
+    def selected_login_event(self, event):
+        self.target = self.login_list_box.get(self.login_list_box.curselection())
 
     def get_login_event(self, event):
         self.login = self.login_entry.get()
@@ -159,14 +152,16 @@ class Client(threading.Thread):
                         # 2) from server to me, updating login list
                         # login;l1;l2;l3;...
                         elif msg[0] == 'login':
-                            self.update_login_list(msg)
+                            self.update_login_list(msg[1:])
 
     def send_entry(self, args):
         self.messages_list.configure(state='normal')
         text = self.text_entry.get()
         if text != '':
-            self.queue.put(text.encode('utf-8'))
-            self.messages_list.insert(tk.END, 'Me (' + self.login + ') >> ' + text + '\n')
+            message = 'msg;' + self.login + ';' + self.target + ';' + text
+            self.queue.put(message.encode('utf-8'))
+            if self.target != self.login:
+                self.messages_list.insert(tk.END, 'Me (' + self.login + ') >> ' + text + '\n')
             self.text_entry.delete(0, tk.END)
         self.text_entry.focus_set()
         self.messages_list.configure(state='disabled')
@@ -179,11 +174,14 @@ class Client(threading.Thread):
         self.messages_list.configure(state='disabled')
         self.messages_list.see(tk.END)
 
-    # Todo - write update_login list, whenever gui is ready
-    def update_login_list(self, list):
-        pass
+    def update_login_list(self, active_users):
+        self.login_list_box.delete(0, tk.END)
+        for user in active_users:
+            self.login_list_box.insert(tk.END, user)
+        self.login_list_box.select_set(0)
+        self.target = self.login_list_box.get(self.login_list_box.curselection())
 
-    def exit(self, event):
+    def exit_event(self, event):
         message = 'logout;' + self.login
         data = message.encode('utf-8')
         try:
@@ -193,6 +191,9 @@ class Client(threading.Thread):
             pass
         finally:
             self.sock.close()
+
+    def on_closing(self):
+        self.exit_event(None)
 
     def send_message(self, data):
         try:
