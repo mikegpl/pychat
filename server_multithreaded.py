@@ -4,6 +4,7 @@ import queue
 import time
 
 
+# Todo - work on too broad exception clauses
 class Server(threading.Thread):
     def __init__(self, host, port):
         super().__init__(daemon=True)
@@ -86,9 +87,9 @@ class Server(threading.Thread):
                             while message[1] in self.login_list:
                                 message[1] += '#'
                             if tmp_login != message[1]:
-                                prompt = 'msg;' + message[1] + ';' + message[1] + ';Login ' + tmp_login \
-                                         + ' already in use. Your login changed to ' + message[1]
-                                self.queue.put((message[1], message[1], prompt.encode('utf-8')))
+                                prompt = 'msg;server;' + message[1] + ';Login ' + tmp_login \
+                                         + ' already in use. Your login changed to ' + message[1] + '\n'
+                                self.queue.put((message[1], 'server', prompt.encode('utf-8')))
 
                             self.login_list[message[1]] = connection
                             print(message[1] + ' has logged in')
@@ -103,8 +104,12 @@ class Server(threading.Thread):
                             # Update list of active users
                             self.update_login_list()
                         elif message[0] == 'msg' and message[2] != 'all':
+                            msg = data.decode('utf-8') + '\n'
+                            data = msg.encode('utf-8')
                             self.queue.put((message[2], message[1], data))
                         elif message[0] == 'msg':
+                            msg = data.decode('utf-8') + '\n'
+                            data = msg.encode('utf-8')
                             self.queue.put(('all', message[1], data))
 
     def send(self):
@@ -130,7 +135,7 @@ class Server(threading.Thread):
         logins = 'login'
         for login in self.login_list:
             logins += ';' + login
-        logins += ';all'
+        logins += ';all' + '\n'
         self.queue.put(('all', 'server', logins.encode('utf-8')))
 
     def send_to_all(self, origin, data):

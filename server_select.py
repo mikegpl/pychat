@@ -4,6 +4,7 @@ import queue
 import signal
 
 
+# Todo - work on too broad exception clauses
 class Server(object):
     def __init__(self, host, port):
         # socket init
@@ -74,8 +75,8 @@ class Server(object):
                             while message[1] in self.login_list:
                                 message[1] += '#'
                             if tmp_login != message[1]:
-                                prompt = 'msg;' + message[1] + ';' + message[1] + ';Login ' + tmp_login \
-                                         + ' already in use. Your login changed to ' + message[1]
+                                prompt = 'msg;server;' + message[1] + ';Login ' + tmp_login \
+                                         + ' already in use. Your login changed to ' + message[1] + '\n'
                                 self.message_queues[socket].put(prompt.encode('utf-8'))
 
                             self.login_list[message[1]] = socket
@@ -100,11 +101,14 @@ class Server(object):
                             self.update_login_list()
                         # 3) msg;from;somebody;msg
                         elif message[0] == 'msg' and message[2] != 'all':
-                            print("Here we go")
+                            msg = data.decode('utf-8') + '\n'
+                            data = msg.encode('utf-8')
                             target = self.login_list[message[2]]
                             self.message_queues[target].put(data)
                         # 4) msg;from;all;msg
                         elif message[0] == 'msg':
+                            msg = data.decode('utf-8') + '\n'
+                            data = msg.encode('utf-8')
                             for connection, connection_queue in self.message_queues.items():
                                 if connection != socket:
                                     connection_queue.put(data)
@@ -150,7 +154,7 @@ class Server(object):
         logins = 'login'
         for login in self.login_list:
             logins += ';' + login
-        logins += ';all'
+        logins += ';all' + '\n'
         logins = logins.encode('utf-8')
         for connection, connection_queue in self.message_queues.items():
             connection_queue.put(logins)
