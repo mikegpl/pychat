@@ -98,7 +98,8 @@ class Server(threading.Thread):
                             self.update_login_list()
                         elif message[0] == 'logout':
                             self.connection_list.remove(self.login_list[message[1]])
-                            del self.login_list[message[1]]
+                            if message[1] in self.login_list:
+                                del self.login_list[message[1]]
                             print(message[1] + ' has logged out')
 
                             # Update list of active users
