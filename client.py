@@ -9,10 +9,10 @@ from tkinter.scrolledtext import ScrolledText
 class Client(threading.Thread):
     def __init__(self, host, port):
 
-        # main thread
+        # Main thread
         super().__init__(daemon=True)
 
-        # socket variables
+        # Socket variables
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -20,14 +20,14 @@ class Client(threading.Thread):
         self.buffer_size = 1024
         self.queue = queue.Queue()
 
-        # gui variables
-        # login window
+        # GUI variables
+        # 1) Login window
         self.login_label = None
         self.login_entry = None
         self.login_button = None
         self.login_root = None
 
-        # main window
+        # 2) Main window
         self.root = None
         self.messages_list = None
         self.text_entry = None
@@ -36,12 +36,12 @@ class Client(threading.Thread):
         self.exit_button = None
         self.login_list_box = None
 
-        # misc
+        # 3) Messaging variables
         self.login = ''
         self.target = ''
         self.login_list = []
 
-        # threads
+        # Threads
         self.lock = threading.RLock()
 
         gui = threading.Thread(target=self.gui)
@@ -55,8 +55,8 @@ class Client(threading.Thread):
         sender.daemon = True
         sender.start()
 
-        # only gui is non-daemon thread, so after closing gui app will quit
-        # end of __init__
+        # Only gui is non-daemon thread, so after closing gui app will quit
+        # End of __init__
 
     # Methods used directly by threads:
     # 1) receiver - self.receive()
@@ -259,5 +259,6 @@ class Client(threading.Thread):
             self.lock.release()
 
 
-# Create new client, with (IP, port)
-client = Client('localhost', 8888)
+# Create new client with (IP, port)
+if __name__ == '__main__':
+    client = Client('localhost', 8888)

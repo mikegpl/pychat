@@ -4,72 +4,73 @@ import queue
 import signal
 
 
-# Todo - work on too broad exception clauses
 class Server(object):
     def __init__(self, host, port):
-        # socket init
+
+        # Socket variables
         self.host = host
         self.port = port
         self.buffer_size = 2048
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        # processing connections
+        # Variables connections
         self.login_list = {}
 
-        # socket setup
+        # Socket setup
         self.sock.bind((str(self.host), int(self.port)))
         self.sock.listen(10)
         self.sock.setblocking(False)
 
-        # select setup()
+        # Variables for select()
 
         self.inputs = [self.sock]
         self.outputs = []
         self.message_queues = {}
 
-        # for exiting
+        # Trap for SIGINT for exiting
         signal.signal(signal.SIGINT, self.sighandler)
 
-    # methods
+        # End of __init__
 
+    # Methods used by server
 
-    def sighandler(self, signum, frame):
-        # close the server
-        print('Shutting down server...')
-        # close existing client sockets
-        for connection in self.outputs:
-            connection.close()
-        self.sock.close()
-
+    # Main server method
     def run(self):
         print("Server started")
         while self.inputs:
             try:
+                # Use select to get lists of sockets ready for IO operations
                 read, write, exceptional = select.select(self.inputs, self.outputs, [])
-            except:
+            except select.error:
                 break
 
-            # readable sockets
+            # Sockets processing
+            # 1) readable sockets
             for socket in read:
-                # 1. processing server socket
+                # a) processing server socket (incoming connection)
                 if socket is self.sock:
-                    connection, address = socket.accept()
-                    print("New connection from ", address)
-                    connection.setblocking(False)
+                    try:
+                        connection, address = socket.accept()
+                        connection.setblocking(False)
+                    except socket.error:
+                        pass
 
                     self.inputs.append(connection)
                     self.outputs.append(connection)
                     self.message_queues[connection] = queue.Queue()
 
-                # 2. processing client socket
+                # b) processing client socket (incoming messages)
                 else:
                     data = socket.recv(self.buffer_size)
+
+                    # Process received data
                     if data:
                         message = data.decode('utf-8')
                         message = message.split(';', 3)
+                        # at most 4 splits (don't split the message if it contains ;)
 
-                        # processing data
-                        # 1) login;nick
+                        # Processing data
+                        # 1) new user logged in
                         if message[0] == 'login':
                             tmp_login = message[1]
                             while message[1] in self.login_list:
@@ -81,9 +82,11 @@ class Server(object):
 
                             self.login_list[message[1]] = socket
                             print(message[1] + ' has logged in')
+
                             # Update list of active users, send it to clients
                             self.update_login_list()
-                        # 2) logout;nick
+
+                        # 2) user logged out
                         elif message[0] == 'logout':
                             print(message[1] + ' has logged out')
 
@@ -97,15 +100,18 @@ class Server(object):
                                 if address == socket:
                                     del self.login_list[login]
                                     break
+
                             # Update list of active users, send it to clients
                             self.update_login_list()
-                        # 3) msg;from;somebody;msg
+
+                        # 3) Message from one user to another (msg;origin;target;message)
                         elif message[0] == 'msg' and message[2] != 'all':
                             msg = data.decode('utf-8') + '\n'
                             data = msg.encode('utf-8')
                             target = self.login_list[message[2]]
                             self.message_queues[target].put(data)
-                        # 4) msg;from;all;msg
+
+                        # 4) Message from one user to all users (msg;origin;all;message)
                         elif message[0] == 'msg':
                             msg = data.decode('utf-8') + '\n'
                             data = msg.encode('utf-8')
@@ -113,7 +119,7 @@ class Server(object):
                                 if connection != socket:
                                     connection_queue.put(data)
 
-                    # empty result == closed connection
+                    # Empty result in socket ready to be read from == closed connection
                     else:
                         self.inputs.remove(socket)
                         if socket in self.outputs:
@@ -128,14 +134,14 @@ class Server(object):
 
                         self.update_login_list()
 
-            # writeable sockets
+            # 2) writeable sockets
             for socket in write:
                 if socket in self.inputs:
                     if not self.message_queues[socket].empty():
                         data = self.message_queues[socket].get()
                         socket.send(data)
 
-            # exceptions
+            # 3) sockets where exceptions has occured
             for socket in exceptional:
                 self.inputs.remove(socket)
                 if socket in self.outputs:
@@ -150,6 +156,7 @@ class Server(object):
 
                 self.update_login_list()
 
+    # Update login list and send it to active users
     def update_login_list(self):
         logins = 'login'
         for login in self.login_list:
@@ -159,6 +166,16 @@ class Server(object):
         for connection, connection_queue in self.message_queues.items():
             connection_queue.put(logins)
 
+    # For handling trapped SIGINT signal
+    def sighandler(self, signum, frame):
+        # close the server
+        print('Shutting down server...')
+        # close existing client sockets
+        for connection in self.outputs:
+            connection.close()
+        self.sock.close()
 
-server = Server('localhost', 8888)
-server.run()
+
+if __name__ == '__main__':
+    server = Server('localhost', 8888)
+    server.run()
