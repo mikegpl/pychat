@@ -106,18 +106,20 @@ class Client(threading.Thread):
     # 3) gui - self.gui()
     def gui(self):
 
+        ###############################################################
         # Login window
         self.login_root = tk.Tk()
         self.login_root.title("Login")
 
         # Label
         self.login_label = tk.Label(self.login_root, text='Enter your login', width=20, font=('Helvetica', 13))
-        self.login_label.pack(side=tk.LEFT)
+        self.login_label.pack(side=tk.LEFT, expand=tk.YES)
 
         # Text entry field
-        self.login_entry = tk.Entry(self.login_root, width=15, font=('Helvetica', 13))
+        self.login_entry = tk.Entry(self.login_root, width=20, font=('Helvetica', 13))
         self.login_entry.focus_set()
         self.login_entry.pack(side=tk.LEFT)
+        self.login_entry.bind('<Return>', self.get_login_event)
 
         # Button for confirmation
         self.login_button = tk.Button(self.login_root, text='Login', font=('Helvetica', 13))
@@ -129,62 +131,82 @@ class Client(threading.Thread):
 
         # Cleaning binding
         self.login_button.unbind('<Button-1>')
+        self.login_entry.unbind('<Return>')
 
         # Close login window
         self.login_root.destroy()
 
+        ###############################################################
         # Main chat window
         self.root = tk.Tk()
 
         # Protocol for closing window using 'x' button
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing_event)
         self.root.title("Python Chat")
+        self.root.minsize(750, 500)
+        main_frame = tk.Frame(self.root)
+        main_frame.grid(row=0, column=0, sticky=tk.N + tk.S + tk.W + tk.E)
 
-        # Frame for displaying messages and logins
-        frame = tk.Frame(self.root, width=80)
-        frame.pack(anchor='w')
+        self.root.rowconfigure(0, weight=1)
+        self.root.columnconfigure(0, weight=1)
+
+        # List of messages
+        frame00 = tk.Frame(main_frame)
+        frame00.grid(column=0, row=0, sticky=tk.N + tk.S + tk.W + tk.E)
+
+        # List of logins
+        frame01 = tk.Frame(main_frame)
+        frame01.grid(column=1, row=0, rowspan=2, sticky=tk.N + tk.S + tk.W + tk.E)
+
+        # Message entry
+        frame02 = tk.Frame(main_frame)
+        frame02.grid(column=0, row=1, sticky=tk.N + tk.S + tk.W + tk.E)
+
+        # Buttons
+        frame03 = tk.Frame(main_frame)
+        frame03.grid(column=1, row=1, sticky=tk.N + tk.S + tk.W + tk.E)
+
+        main_frame.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
 
         # ScrolledText widget for displaying messages
-        self.messages_list = ScrolledText(frame, height=20, width=60, wrap='word', font=('Helvetica', 13))
+        self.messages_list = ScrolledText(frame00, wrap='word', font=('Helvetica', 13))
         self.messages_list.insert(tk.END, 'Welcome to Python Chat\n')
         self.messages_list.configure(state='disabled')
 
         # Listbox widget for displaying active users and selecting them
         # selectmode = tk.SINGLE for choosing only one user at a time
         # exportselection = False to enable highlighting login in list even if multiple clients are opened
-        self.login_list_box = tk.Listbox(frame, selectmode=tk.SINGLE, width=15, height=18, font=('Helvetica', 13),
+        self.login_list_box = tk.Listbox(frame01, selectmode=tk.SINGLE, font=('Helvetica', 13),
                                          exportselection=False)
         self.login_list_box.bind('<<ListboxSelect>>', self.selected_login_event)
 
         # Positioning widgets in frame
-        self.messages_list.pack(side=tk.LEFT)
-        self.login_list_box.pack(anchor='e', side=tk.LEFT)
-
-        # Frame for prompt, 'Exit' and 'Send' buttons and entry field
-        outer_frame = tk.Frame(self.root, width=80)
-        outer_frame.pack(anchor='w')
+        self.messages_list.pack(fill=tk.BOTH, expand=tk.YES)
+        self.login_list_box.pack(fill=tk.BOTH, expand=tk.YES)
 
         # Label widget as prompt
-        self.prompt = tk.Label(outer_frame, text=self.login + ' >>', font=('Helvetica', 13))
+        self.prompt = tk.Label(frame02, text=self.login + ' >>', font=('Helvetica', 13))
 
         # Entry widget for typing messages in
-        self.text_entry = tk.Entry(outer_frame, width=50, font=('Helvetica', 13))
+        self.text_entry = tk.Entry(frame02, font=('Helvetica', 13))
         self.text_entry.focus_set()
-        self.text_entry.bind(sequence='<Return>', func=self.send_entry_event)
+        self.text_entry.bind('<Return>', self.send_entry_event)
 
         # Button widget for sending messages
-        self.send_button = tk.Button(outer_frame, text='Send', font=('Helvetica', 13))
+        self.send_button = tk.Button(frame03, text='Send', font=('Helvetica', 13))
         self.send_button.bind('<Button-1>', self.send_entry_event)
 
         # Button for exiting
-        self.exit_button = tk.Button(outer_frame, text='Exit', font=('Helvetica', 13))
+        self.exit_button = tk.Button(frame03, text='Exit', font=('Helvetica', 13))
         self.exit_button.bind('<Button-1>', self.exit_event)
 
         # Positioning widgets in frame
-        self.prompt.pack(side=tk.LEFT)
-        self.text_entry.pack(side=tk.LEFT)
-        self.send_button.pack(side=tk.LEFT)
-        self.exit_button.pack(side=tk.LEFT)
+        self.prompt.pack(side=tk.LEFT, fill=tk.X)
+        self.text_entry.pack(side=tk.LEFT, fill=tk.X, expand=tk.YES)
+        self.send_button.pack(side=tk.TOP)
+        self.exit_button.pack(side=tk.TOP)
 
         # Send info to server, that user has logged in
         message = 'login;' + self.login
@@ -206,7 +228,7 @@ class Client(threading.Thread):
         self.target = self.login_list_box.get(self.login_list_box.curselection())
 
     # Send message from entry field to currently selected user
-    def send_entry_event(self, args):
+    def send_entry_event(self, event):
         self.messages_list.configure(state='normal')
         text = self.text_entry.get()
         if text != '':
