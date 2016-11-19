@@ -8,7 +8,7 @@ class Server(threading.Thread):
     def __init__(self, host, port):
 
         # Main thread
-        super().__init__(daemon=True)
+        super().__init__(daemon=False)
 
         # Socket variables
         self.host = host
