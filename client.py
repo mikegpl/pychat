@@ -3,7 +3,8 @@ import threading
 import queue
 import time
 import tkinter as tk
-from tkinter.scrolledtext import ScrolledText
+from tkinter import scrolledtext
+from tkinter import messagebox
 
 
 class Client(threading.Thread):
@@ -59,7 +60,6 @@ class Client(threading.Thread):
 
     # Methods used directly by threads:
     # 1) receiver - self.receive()
-
     def receive(self):
         while True:
             try:
@@ -142,7 +142,8 @@ class Client(threading.Thread):
         # Protocol for closing window using 'x' button
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing_event)
         self.root.title("Python Chat")
-        self.root.minsize(750, 500)
+        self.root.geometry('750x500')
+        self.root.minsize(600, 400)
         main_frame = tk.Frame(self.root)
         main_frame.grid(row=0, column=0, sticky=tk.N + tk.S + tk.W + tk.E)
 
@@ -151,27 +152,28 @@ class Client(threading.Thread):
 
         # List of messages
         frame00 = tk.Frame(main_frame)
-        frame00.grid(column=0, row=0, sticky=tk.N + tk.S + tk.W + tk.E)
+        frame00.grid(column=0, row=0, rowspan=2, sticky=tk.N + tk.S + tk.W + tk.E)
 
         # List of logins
         frame01 = tk.Frame(main_frame)
-        frame01.grid(column=1, row=0, rowspan=2, sticky=tk.N + tk.S + tk.W + tk.E)
+        frame01.grid(column=1, row=0, rowspan=3, sticky=tk.N + tk.S + tk.W + tk.E)
 
         # Message entry
         frame02 = tk.Frame(main_frame)
-        frame02.grid(column=0, row=1, columnspan=1, sticky=tk.N + tk.S + tk.W + tk.E)
+        frame02.grid(column=0, row=2, columnspan=1, sticky=tk.N + tk.S + tk.W + tk.E)
 
         # Buttons
         frame03 = tk.Frame(main_frame)
-        frame03.grid(column=0, row=2, columnspan=2, sticky=tk.N + tk.S + tk.W + tk.E)
+        frame03.grid(column=0, row=3, columnspan=2, sticky=tk.N + tk.S + tk.W + tk.E)
 
         main_frame.rowconfigure(0, weight=1)
         main_frame.rowconfigure(1, weight=1)
+        main_frame.rowconfigure(2, weight=8)
         main_frame.columnconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
 
         # ScrolledText widget for displaying messages
-        self.messages_list = ScrolledText(frame00, wrap='word', font=('Helvetica', 13))
+        self.messages_list = scrolledtext.ScrolledText(frame00, wrap='word', font=('Helvetica', 13))
         self.messages_list.insert(tk.END, 'Welcome to Python Chat\n')
         self.messages_list.configure(state='disabled')
 
@@ -186,9 +188,8 @@ class Client(threading.Thread):
         self.messages_list.pack(fill=tk.BOTH, expand=tk.YES)
         self.login_list_box.pack(fill=tk.BOTH, expand=tk.YES)
 
-
         # Entry widget for typing messages in
-        self.text_entry = tk.Entry(frame02, font=('Helvetica', 13))
+        self.text_entry = tk.Text(frame02, font=('Helvetica', 13))
         self.text_entry.focus_set()
         self.text_entry.bind('<Return>', self.send_entry_event)
 
@@ -227,16 +228,23 @@ class Client(threading.Thread):
     # Send message from entry field to currently selected user
     def send_entry_event(self, event):
         self.messages_list.configure(state='normal')
-        text = self.text_entry.get()
-        if text != '':
-            message = 'msg;' + self.login + ';' + self.target + ';' + text
+        text = self.text_entry.get(1.0, tk.END)
+        if text != '\n':
+            # text[:-1] because last char is a newline
+            message = 'msg;' + self.login + ';' + self.target + ';' + text[:-1]
             self.queue.put(message.encode('utf-8'))
             if self.target != self.login:
-                self.messages_list.insert(tk.END, 'Me (' + self.login + ') >> ' + text + '\n')
-            self.text_entry.delete(0, tk.END)
+                self.messages_list.insert(tk.END, text)
+            self.text_entry.mark_set(tk.INSERT, 1.0)
+            self.text_entry.delete(1.0, tk.END)
+
+        else:
+            messagebox.showinfo('Warning', 'You must enter non-empty message')
         self.text_entry.focus_set()
         self.messages_list.configure(state='disabled')
         self.messages_list.see(tk.END)
+        # if event was called by pressing Enter, then without returning break cursor will go to next line
+        return 'break'
 
     # Send logout message to server and quit, after pressing 'Exit' button
     def exit_event(self, event):
