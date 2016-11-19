@@ -31,7 +31,6 @@ class Client(threading.Thread):
         self.root = None
         self.messages_list = None
         self.text_entry = None
-        self.prompt = None
         self.send_button = None
         self.exit_button = None
         self.login_list_box = None
@@ -160,13 +159,14 @@ class Client(threading.Thread):
 
         # Message entry
         frame02 = tk.Frame(main_frame)
-        frame02.grid(column=0, row=1, sticky=tk.N + tk.S + tk.W + tk.E)
+        frame02.grid(column=0, row=1, columnspan=1, sticky=tk.N + tk.S + tk.W + tk.E)
 
         # Buttons
         frame03 = tk.Frame(main_frame)
-        frame03.grid(column=1, row=1, sticky=tk.N + tk.S + tk.W + tk.E)
+        frame03.grid(column=0, row=2, columnspan=2, sticky=tk.N + tk.S + tk.W + tk.E)
 
         main_frame.rowconfigure(0, weight=1)
+        main_frame.rowconfigure(1, weight=1)
         main_frame.columnconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
 
@@ -186,8 +186,6 @@ class Client(threading.Thread):
         self.messages_list.pack(fill=tk.BOTH, expand=tk.YES)
         self.login_list_box.pack(fill=tk.BOTH, expand=tk.YES)
 
-        # Label widget as prompt
-        self.prompt = tk.Label(frame02, text=self.login + ' >>', font=('Helvetica', 13))
 
         # Entry widget for typing messages in
         self.text_entry = tk.Entry(frame02, font=('Helvetica', 13))
@@ -203,10 +201,9 @@ class Client(threading.Thread):
         self.exit_button.bind('<Button-1>', self.exit_event)
 
         # Positioning widgets in frame
-        self.prompt.pack(side=tk.LEFT, fill=tk.X)
-        self.text_entry.pack(side=tk.LEFT, fill=tk.X, expand=tk.YES)
-        self.send_button.pack(side=tk.TOP)
-        self.exit_button.pack(side=tk.TOP)
+        self.text_entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
+        self.send_button.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
+        self.exit_button.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
 
         # Send info to server, that user has logged in
         message = 'login;' + self.login
