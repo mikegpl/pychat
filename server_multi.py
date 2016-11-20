@@ -52,16 +52,18 @@ class Server(threading.Thread):
             try:
                 self.lock.acquire()
                 connection, address = self.sock.accept()
-                connection.setblocking(False)
-                if connection not in self.connection_list:
-                    self.connection_list.append(connection)
-
-                self.message_queues[connection] = queue.Queue()
-                ClientThread(self, connection, address)
             except socket.error:
-                time.sleep(0.05)
-            finally:
                 self.lock.release()
+                time.sleep(0.05)
+                continue
+
+            self.lock.release()
+            connection.setblocking(False)
+            if connection not in self.connection_list:
+                self.connection_list.append(connection)
+
+            self.message_queues[connection] = queue.Queue()
+            ClientThread(self, connection, address)
 
 
 class ClientThread(threading.Thread):
@@ -180,4 +182,5 @@ class ClientThread(threading.Thread):
             connection_queue.put(logins)
 
 
-server = Server('localhost', 8888)
+if __name__ == '__main__':
+    server = Server('localhost', 8888)

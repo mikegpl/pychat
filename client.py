@@ -2,16 +2,19 @@ import socket
 import threading
 import queue
 import time
+import select
 import tkinter as tk
 from tkinter import scrolledtext
 from tkinter import messagebox
 
 
+# Todo - add locking (!)
+
 class Client(threading.Thread):
     def __init__(self, host, port):
 
         # Main thread
-        super().__init__(daemon=True)
+        super().__init__(daemon=True, target=self.run)
 
         # Socket variables
         self.host = host
@@ -43,66 +46,71 @@ class Client(threading.Thread):
 
         # Threads
         self.lock = threading.RLock()
-
         gui = threading.Thread(target=self.gui)
-        receiver = threading.Thread(target=self.receive)
-        sender = threading.Thread(target=self.send)
-
-        receiver.daemon = True
-        receiver.start()
+        self.start()
         gui.daemon = False
         gui.start()
-        sender.daemon = True
-        sender.start()
-
         # Only gui is non-daemon thread, so after closing gui app will quit
         # End of __init__
 
-    # Methods used directly by threads:
-    # 1) receiver - self.receive()
-    def receive(self):
-        while True:
+    # Threads methods:
+    # 1) main thread - run
+    # After setting up GUI in its thread, we will modify GUI only from main thread in self.run
+    def run(self):
+        inputs = [self.sock]
+        outputs = [self.sock]
+        while inputs:
             try:
-                received_data = self.sock.recv(self.buffer_size)
-            except socket.error:
-                time.sleep(0.050)
-                continue
+                read, write, exceptional = select.select(inputs, outputs, inputs)
+            # if server unexpectedly quit, this will get ValueError (file descriptor < 0)
+            except ValueError:
+                print('Server error')
+                messagebox.showinfo('Error', 'Server error has occurred. Exit app')
+                self.sock.close()
+                break
 
-            if received_data:
-                message = received_data.decode('utf-8')
-                message = message.split('\n')
+            if self.sock in read:
+                data = self.sock.recv(self.buffer_size)
 
-                for msg in message:
-                    if msg != '':
-                        msg = msg.split(';')
+                if data:
+                    message = data.decode('utf-8')
+                    message = message.split('\n')
 
-                        # possible messages
-                        # 1) from somebody to me
-                        # msg;sb;me;message
-                        if msg[0] == 'msg':
-                            text = msg[1] + ' >> ' + msg[3] + '\n'
-                            self.display_message(text)
+                    for msg in message:
+                        if msg != '':
+                            msg = msg.split(';')
 
-                            # if login you have chosen is already used:
-                            if msg[2] != self.login and msg[2] != 'all':
-                                self.login = msg[2]
+                            # possible messages
+                            # 1) sb to me
+                            # msg;sb;me;message
+                            if msg[0] == 'msg':
+                                text = msg[1] + ' >> ' + msg[3] + '\n'
+                                self.display_message(text)
 
-                        # 2) from server to me, updating login list
-                        # login;l1;l2;l3;...
-                        elif msg[0] == 'login':
-                            self.update_login_list(msg[1:])
+                                # if chosen login is already in use
+                                if msg[2] != self.login and msg[2] != 'ALL':
+                                    self.login = msg[2]
 
-    # 2) sender - self.send()
-    def send(self):
-        while True:
-            if not self.queue.empty():
-                data = self.queue.get()
-                self.send_message(data)
-                self.queue.task_done()
-            else:
-                time.sleep(0.050)
+                            # 2) server to me, updating login list
+                            # login;l1;l2;l3;ALL
+                            elif msg[0] == 'login':
+                                self.update_login_list(msg[1:])
 
-    # 3) gui - self.gui()
+            if self.sock in write:
+                if not self.queue.empty():
+                    data = self.queue.get()
+                    self.send_message(data)
+                    self.queue.task_done()
+                else:
+                    time.sleep(0.05)
+
+            if self.sock in exceptional:
+                print('Server error')
+                messagebox.showinfo('Error', 'Server error has occurred. Exit app')
+                self.sock.close()
+                break
+
+    # 2) gui - self.gui()
     def gui(self):
 
         ###############################################################
@@ -275,7 +283,7 @@ class Client(threading.Thread):
         self.login_list_box.select_set(0)
         self.target = self.login_list_box.get(self.login_list_box.curselection())
 
-    # 3) sender method:
+    # 3) main thread method:
     def send_message(self, data):
         try:
             self.lock.acquire()
@@ -288,4 +296,4 @@ class Client(threading.Thread):
 
 # Create new client with (IP, port)
 if __name__ == '__main__':
-    client = Client('localhost', 8888)
+    Client('localhost', 8888)
