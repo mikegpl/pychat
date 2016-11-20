@@ -164,8 +164,6 @@ class ClientThread(threading.Thread):
                     print(self.login + ' has disconnected.')
                     inputs.remove(self.socket)
                     outputs.remove(self.socket)
-                    inputs.remove(self.socket)
-                    outputs.remove(self.socket)
                     if self.socket in self.master.message_queues:
                         del self.master.message_queues[self.socket]
                     if self.login in self.master.login_list:
