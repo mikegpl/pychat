@@ -195,7 +195,7 @@ class ClientThread(threading.Thread):
                             self.socket.close()
                             break
 
-            if self.socket in exceptional and not shutdown:
+            if self.socket in exceptional:
                 print(self.login + ' has disconnected.')
                 inputs.remove(self.socket)
                 outputs.remove(self.socket)
@@ -209,6 +209,7 @@ class ClientThread(threading.Thread):
 
                 self.update_login_list()
 
+        # If exited from main run loop
         print('Closing client thread, connection' + str(self.address))
 
     def update_login_list(self):
@@ -221,5 +222,6 @@ class ClientThread(threading.Thread):
             connection_queue.put(logins)
 
 
+# Create new server with (IP, port)
 if __name__ == '__main__':
     server = Server('localhost', 8888)

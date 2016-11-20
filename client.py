@@ -301,7 +301,6 @@ class Client(threading.Thread):
                 messagebox.showinfo('Error', 'Server error has occurred. Exit app')
 
 
-
 # Create new client with (IP, port)
 if __name__ == '__main__':
     Client('localhost', 8888)
