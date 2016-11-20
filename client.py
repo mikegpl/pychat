@@ -8,8 +8,6 @@ from tkinter import scrolledtext
 from tkinter import messagebox
 
 
-# Todo - add locking (!)
-
 class Client(threading.Thread):
     def __init__(self, host, port):
 
@@ -70,7 +68,13 @@ class Client(threading.Thread):
                 break
 
             if self.sock in read:
-                data = self.sock.recv(self.buffer_size)
+                with self.lock:
+                    try:
+                        data = self.sock.recv(self.buffer_size)
+                    except socket.error:
+                        messagebox.showinfo('Error', 'Server error has occurred. Exit app')
+                        self.sock.close()
+                        break
 
                 if data:
                     message = data.decode('utf-8')
@@ -235,23 +239,25 @@ class Client(threading.Thread):
 
     # Send message from entry field to currently selected user
     def send_entry_event(self, event):
-        self.messages_list.configure(state='normal')
+
         text = self.text_entry.get(1.0, tk.END)
         if text != '\n':
             # text[:-1] because last char is a newline
             message = 'msg;' + self.login + ';' + self.target + ';' + text[:-1]
             self.queue.put(message.encode('utf-8'))
-            if self.target != self.login:
-                self.messages_list.insert(tk.END, text)
             self.text_entry.mark_set(tk.INSERT, 1.0)
             self.text_entry.delete(1.0, tk.END)
-
+            self.text_entry.focus_set()
         else:
             messagebox.showinfo('Warning', 'You must enter non-empty message')
-        self.text_entry.focus_set()
-        self.messages_list.configure(state='disabled')
-        self.messages_list.see(tk.END)
-        # if event was called by pressing Enter, then without returning break cursor will go to next line
+
+        with self.lock:
+            self.messages_list.configure(state='normal')
+            if text != '\n':
+                self.messages_list.insert(tk.END, text)
+            self.messages_list.configure(state='disabled')
+            self.messages_list.see(tk.END)
+            # if event was called by pressing Enter, then without returning break cursor will go to next line
         return 'break'
 
     # Send logout message to server and quit, after pressing 'Exit' button
@@ -270,12 +276,14 @@ class Client(threading.Thread):
     # 2) other gui methods
     # Display a message in ScrolledText widget
     def display_message(self, message):
-        self.messages_list.configure(state='normal')
-        self.messages_list.insert(tk.END, message)
-        self.messages_list.configure(state='disabled')
-        self.messages_list.see(tk.END)
+        with self.lock:
+            self.messages_list.configure(state='normal')
+            self.messages_list.insert(tk.END, message)
+            self.messages_list.configure(state='disabled')
+            self.messages_list.see(tk.END)
 
     # Update listbox with list of active users
+    # method below can be used without locks, because login_list is only used by main thread
     def update_login_list(self, active_users):
         self.login_list_box.delete(0, tk.END)
         for user in active_users:
@@ -285,13 +293,13 @@ class Client(threading.Thread):
 
     # 3) main thread method:
     def send_message(self, data):
-        try:
-            self.lock.acquire()
-            self.sock.send(data)
-        except socket.error:
-            self.sock.close()
-        finally:
-            self.lock.release()
+        with self.lock:
+            try:
+                self.sock.send(data)
+            except socket.error:
+                self.sock.close()
+                messagebox.showinfo('Error', 'Server error has occurred. Exit app')
+
 
 
 # Create new client with (IP, port)

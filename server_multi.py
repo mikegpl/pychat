@@ -5,7 +5,6 @@ import time
 import select
 
 
-# Todo - add locking (!)
 class Server(threading.Thread):
     def __init__(self, host, port):
         # Main thread
@@ -49,15 +48,13 @@ class Server(threading.Thread):
     def listen(self):
         print('Initiated listener thread')
         while True:
-            try:
-                self.lock.acquire()
-                connection, address = self.sock.accept()
-            except socket.error:
-                self.lock.release()
-                time.sleep(0.05)
-                continue
+            with self.lock:
+                try:
+                    connection, address = self.sock.accept()
+                except socket.error:
+                    time.sleep(0.05)
+                    continue
 
-            self.lock.release()
             connection.setblocking(False)
             if connection not in self.connection_list:
                 self.connection_list.append(connection)
@@ -77,6 +74,7 @@ class ClientThread(threading.Thread):
         self.start()
         print('New thread started for connection from ' + str(self.address))
 
+    # In run we don't need to use locks, because sockets are accessed linearly
     def run(self):
         inputs = [self.socket]
         outputs = [self.socket]
@@ -85,14 +83,32 @@ class ClientThread(threading.Thread):
             try:
                 read, write, exceptional = select.select(inputs, outputs, inputs)
             except select.error:
-                # delete queue
-                # remove from login list etc
-                # update login list
+                print(self.login + 'has disconnected.')
+                if self.login in self.master.login_list:
+                    del self.master.login_list[self.login]
+                if self.socket in self.master.connection_list:
+                    self.master.connection_list.remove(self.socket)
+                if self.socket in self.master.message_queues:
+                    del self.master.message_queues[self.socket]
                 self.socket.close()
+                self.update_login_list()
                 break
 
             if self.socket in read:
-                data = self.socket.recv(self.buffer_size)
+                try:
+                    data = self.socket.recv(self.buffer_size)
+                except socket.error:
+                    print(self.login + ' has disconnected.')
+                    inputs.remove(self.socket)
+                    outputs.remove(self.socket)
+                    if self.socket in self.master.message_queues:
+                        del self.master.message_queues[self.socket]
+                    if self.login in self.master.login_list:
+                        del self.master.login_list[self.login]
+                    if self.socket in self.master.connection_list:
+                        self.master.connection_list.remove(self.socket)
+                    self.socket.close()
+                    break
 
                 if data:
                     message = data.decode('utf-8')
@@ -125,8 +141,8 @@ class ClientThread(threading.Thread):
                         del self.master.message_queues[self.socket]
                         del self.master.login_list[self.login]
                         self.socket.close()
-                        shutdown = True
                         self.update_login_list()
+                        break
 
                     # 3) Message from one user to another (msg;origin;target;message)
                     elif message[0] == 'msg' and message[2] != 'ALL':
@@ -148,24 +164,47 @@ class ClientThread(threading.Thread):
                     print(self.login + ' has disconnected.')
                     inputs.remove(self.socket)
                     outputs.remove(self.socket)
-                    del self.master.message_queues[self.socket]
-                    del self.master.login_list[self.login]
+                    inputs.remove(self.socket)
+                    outputs.remove(self.socket)
+                    if self.socket in self.master.message_queues:
+                        del self.master.message_queues[self.socket]
+                    if self.login in self.master.login_list:
+                        del self.master.login_list[self.login]
+                    if self.socket in self.master.connection_list:
+                        self.master.connection_list.remove(self.socket)
                     self.socket.close()
-                    shutdown = True
                     self.update_login_list()
+                    break
 
             if self.socket in write:
                 if self.socket in self.master.message_queues:
                     if not self.master.message_queues[self.socket].empty():
                         data = self.master.message_queues[self.socket].get()
-                        self.socket.send(data)
+                        try:
+                            self.socket.send(data)
+                        except socket.error:
+                            print(self.login + ' has disconnected.')
+                            inputs.remove(self.socket)
+                            outputs.remove(self.socket)
+                            if self.socket in self.master.message_queues:
+                                del self.master.message_queues[self.socket]
+                            if self.login in self.master.login_list:
+                                del self.master.login_list[self.login]
+                            if self.socket in self.master.connection_list:
+                                self.master.connection_list.remove(self.socket)
+                            self.socket.close()
+                            break
 
             if self.socket in exceptional and not shutdown:
                 print(self.login + ' has disconnected.')
                 inputs.remove(self.socket)
                 outputs.remove(self.socket)
-                del self.master.message_queues[self.socket]
-                del self.master.login_list[self.login]
+                if self.socket in self.master.message_queues:
+                    del self.master.message_queues[self.socket]
+                if self.login in self.master.login_list:
+                    del self.master.login_list[self.login]
+                if self.socket in self.master.connection_list:
+                    self.master.connection_list.remove(self.socket)
                 self.socket.close()
 
                 self.update_login_list()
