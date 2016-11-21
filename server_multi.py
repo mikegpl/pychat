@@ -71,43 +71,32 @@ class ClientThread(threading.Thread):
         self.address = address
         self.buffer_size = 2048
         self.login = ''
+        self.inputs = []
+        self.outputs = []
         self.start()
         print('New thread started for connection from ' + str(self.address))
 
     # In run we don't need to use locks, because sockets are accessed linearly
     def run(self):
-        inputs = [self.socket]
-        outputs = [self.socket]
+        self.inputs = [self.socket]
+        self.outputs = [self.socket]
         shutdown = False
-        while inputs:
+        while self.inputs:
             try:
-                read, write, exceptional = select.select(inputs, outputs, inputs)
+                read, write, exceptional = select.select(self.inputs, self.outputs, self.inputs)
             except select.error:
-                print(self.login + 'has disconnected.')
-                if self.login in self.master.login_list:
-                    del self.master.login_list[self.login]
-                if self.socket in self.master.connection_list:
-                    self.master.connection_list.remove(self.socket)
-                if self.socket in self.master.message_queues:
-                    del self.master.message_queues[self.socket]
-                self.socket.close()
-                self.update_login_list()
+                self.client_disconnected()
                 break
 
             if self.socket in read:
                 try:
                     data = self.socket.recv(self.buffer_size)
                 except socket.error:
-                    print(self.login + ' has disconnected.')
-                    inputs.remove(self.socket)
-                    outputs.remove(self.socket)
-                    if self.socket in self.master.message_queues:
-                        del self.master.message_queues[self.socket]
-                    if self.login in self.master.login_list:
-                        del self.master.login_list[self.login]
-                    if self.socket in self.master.connection_list:
-                        self.master.connection_list.remove(self.socket)
-                    self.socket.close()
+                    if self.socket in self.inputs:
+                        self.inputs.remove(self.socket)
+                    if self.socket in self.outputs:
+                        self.outputs.remove(self.socket)
+                    self.client_disconnected()
                     break
 
                 if data:
@@ -136,8 +125,8 @@ class ClientThread(threading.Thread):
                     elif message[0] == 'logout':
                         print(message[1] + ' has logged out')
 
-                        inputs.remove(self.socket)
-                        outputs.remove(self.socket)
+                        self.inputs.remove(self.socket)
+                        self.outputs.remove(self.socket)
                         del self.master.message_queues[self.socket]
                         del self.master.login_list[self.login]
                         self.socket.close()
@@ -161,17 +150,11 @@ class ClientThread(threading.Thread):
 
                 # Empty result in socket ready to be read from == closed connection
                 elif not shutdown:
-                    print(self.login + ' has disconnected.')
-                    inputs.remove(self.socket)
-                    outputs.remove(self.socket)
-                    if self.socket in self.master.message_queues:
-                        del self.master.message_queues[self.socket]
-                    if self.login in self.master.login_list:
-                        del self.master.login_list[self.login]
-                    if self.socket in self.master.connection_list:
-                        self.master.connection_list.remove(self.socket)
-                    self.socket.close()
-                    self.update_login_list()
+                    if self.socket in self.inputs:
+                        self.inputs.remove(self.socket)
+                    if self.socket in self.outputs:
+                        self.outputs.remove(self.socket)
+                    self.client_disconnected()
                     break
 
             if self.socket in write:
@@ -181,31 +164,19 @@ class ClientThread(threading.Thread):
                         try:
                             self.socket.send(data)
                         except socket.error:
-                            print(self.login + ' has disconnected.')
-                            inputs.remove(self.socket)
-                            outputs.remove(self.socket)
-                            if self.socket in self.master.message_queues:
-                                del self.master.message_queues[self.socket]
-                            if self.login in self.master.login_list:
-                                del self.master.login_list[self.login]
-                            if self.socket in self.master.connection_list:
-                                self.master.connection_list.remove(self.socket)
-                            self.socket.close()
+                            if self.socket in self.inputs:
+                                self.inputs.remove(self.socket)
+                            if self.socket in self.outputs:
+                                self.outputs.remove(self.socket)
+                            self.client_disconnected()
                             break
 
             if self.socket in exceptional:
-                print(self.login + ' has disconnected.')
-                inputs.remove(self.socket)
-                outputs.remove(self.socket)
-                if self.socket in self.master.message_queues:
-                    del self.master.message_queues[self.socket]
-                if self.login in self.master.login_list:
-                    del self.master.login_list[self.login]
-                if self.socket in self.master.connection_list:
-                    self.master.connection_list.remove(self.socket)
-                self.socket.close()
-
-                self.update_login_list()
+                if self.socket in self.inputs:
+                    self.inputs.remove(self.socket)
+                if self.socket in self.outputs:
+                    self.outputs.remove(self.socket)
+                self.client_disconnected()
 
         # If exited from main run loop
         print('Closing client thread, connection' + str(self.address))
@@ -219,6 +190,16 @@ class ClientThread(threading.Thread):
         for connection, connection_queue in self.master.message_queues.items():
             connection_queue.put(logins)
 
+    def client_disconnected(self):
+        print(self.login + 'has disconnected.')
+        if self.login in self.master.login_list:
+            del self.master.login_list[self.login]
+        if self.socket in self.master.connection_list:
+            self.master.connection_list.remove(self.socket)
+        if self.socket in self.master.message_queues:
+            del self.master.message_queues[self.socket]
+        self.socket.close()
+        self.update_login_list()
 
 # Create new server with (IP, port)
 if __name__ == '__main__':
