@@ -8,9 +8,32 @@ from tkinter import scrolledtext
 from tkinter import messagebox
 
 
+class GUI(threading.Thread):
+    def __init__(self):
+        super().__init__(daemon=False, target=self.gui)
+        self.display_queue = queue.Queue()
+        self.login_window = LoginWindow()
+        self.main_window = ChatWindow()
+
+
+    def gui(self):
+        pass
+
+
+class Window(object):
+    pass
+
+
+class LoginWindow(Window):
+    pass
+
+
+class ChatWindow(Window):
+    pass
+
+
 class Client(threading.Thread):
     def __init__(self, host, port):
-
         # Main thread
         super().__init__(daemon=True, target=self.run)
 
@@ -53,8 +76,8 @@ class Client(threading.Thread):
 
     # Threads methods:
     # 1) main thread - run
-    # After setting up GUI in its thread, we will modify GUI only from main thread in self.run
     def run(self):
+        """This method handles client-server communication using select module"""
         inputs = [self.sock]
         outputs = [self.sock]
         while inputs:
@@ -76,29 +99,7 @@ class Client(threading.Thread):
                         self.sock.close()
                         break
 
-                if data:
-                    message = data.decode('utf-8')
-                    message = message.split('\n')
-
-                    for msg in message:
-                        if msg != '':
-                            msg = msg.split(';')
-
-                            # possible messages
-                            # 1) sb to me
-                            # msg;sb;me;message
-                            if msg[0] == 'msg':
-                                text = msg[1] + ' >> ' + msg[3] + '\n'
-                                self.display_message(text)
-
-                                # if chosen login is already in use
-                                if msg[2] != self.login and msg[2] != 'ALL':
-                                    self.login = msg[2]
-
-                            # 2) server to me, updating login list
-                            # login;l1;l2;l3;ALL
-                            elif msg[0] == 'login':
-                                self.update_login_list(msg[1:])
+                self.process_received_data(data)
 
             if self.sock in write:
                 if not self.queue.empty():
@@ -114,10 +115,47 @@ class Client(threading.Thread):
                 self.sock.close()
                 break
 
+    def process_received_data(self, data):
+        """Process received message from server"""
+        if data:
+            message = data.decode('utf-8')
+            message = message.split('\n')
+
+            for msg in message:
+                if msg != '':
+                    msg = msg.split(';')
+
+                    # possible messages
+                    # 1) user to me
+                    # msg;user;me;message
+                    if msg[0] == 'msg':
+                        text = msg[1] + ' >> ' + msg[3] + '\n'
+                        self.display_message(text)
+
+                        # if chosen login is already in use
+                        if msg[2] != self.login and msg[2] != 'ALL':
+                            self.login = msg[2]
+
+                    # 2) server to me, updating login list
+                    # login;l1;l2;l3;ALL
+                    elif msg[0] == 'login':
+                        self.update_login_list(msg[1:])
+
     # 2) gui - self.gui()
     def gui(self):
+        """This method sets up both login and main window, and starts GUI mainloop"""
+        self.set_up_login_window()
+        self.set_up_main_window()
+        # Send info to server, that user has logged in
+        message = 'login;' + self.login
+        self.queue.put(message.encode('utf-8'))
+        # Window main loop
+        self.root.mainloop()
+        # Close main window
+        self.root.destroy()
 
-        ###############################################################
+    def set_up_login_window(self):
+        """Create login window and perform it's main loop waiting for entered login"""
         # Login window
         self.login_root = tk.Tk()
         self.login_root.title("Login")
@@ -147,7 +185,8 @@ class Client(threading.Thread):
         # Close login window
         self.login_root.destroy()
 
-        ###############################################################
+    def set_up_main_window(self):
+        """Create main window"""
         # Main chat window
         self.root = tk.Tk()
 
@@ -218,31 +257,21 @@ class Client(threading.Thread):
         self.send_button.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
         self.exit_button.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
 
-        # Send info to server, that user has logged in
-        message = 'login;' + self.login
-        self.queue.put(message.encode('utf-8'))
-        # Window main loop
-        self.root.mainloop()
-        # Close main window
-        self.root.destroy()
-
     # Methods used by threads:
     # 1) gui events
-    # Get login from login window
     def get_login_event(self, event):
+        """Get login from login box and close login window"""
         self.login = self.login_entry.get()
         self.login_root.quit()
 
-    # Set as target currently selected login in login list
     def selected_login_event(self, event):
+        """Set as target currently selected login on login list"""
         self.target = self.login_list_box.get(self.login_list_box.curselection())
 
-    # Send message from entry field to currently selected user
     def send_entry_event(self, event):
-
+        """Send message from entry field to target"""
         text = self.text_entry.get(1.0, tk.END)
         if text != '\n':
-            # text[:-1] because last char is a newline
             message = 'msg;' + self.login + ';' + self.target + ';' + text[:-1]
             self.queue.put(message.encode('utf-8'))
             self.text_entry.mark_set(tk.INSERT, 1.0)
@@ -257,11 +286,10 @@ class Client(threading.Thread):
                 self.messages_list.insert(tk.END, text)
             self.messages_list.configure(state='disabled')
             self.messages_list.see(tk.END)
-            # if event was called by pressing Enter, then without returning break cursor will go to next line
         return 'break'
 
-    # Send logout message to server and quit, after pressing 'Exit' button
     def exit_event(self, event):
+        """Send logout message and quit app when "Exit" pressed"""
         message = 'logout;' + self.login
         data = message.encode('utf-8')
 
@@ -269,30 +297,29 @@ class Client(threading.Thread):
         self.root.quit()
         self.sock.close()
 
-    # Access exit event when window is closed with 'x'
     def on_closing_event(self):
+        """Exit window when 'x' button is pressed"""
         self.exit_event(None)
 
     # 2) other gui methods
-    # Display a message in ScrolledText widget
     def display_message(self, message):
+        """Display message in ScrolledText widget"""
         with self.lock:
             self.messages_list.configure(state='normal')
             self.messages_list.insert(tk.END, message)
             self.messages_list.configure(state='disabled')
             self.messages_list.see(tk.END)
 
-    # Update listbox with list of active users
-    # method below can be used without locks, because login_list is only used by main thread
     def update_login_list(self, active_users):
+        """Update listbox with list of active users"""
         self.login_list_box.delete(0, tk.END)
         for user in active_users:
             self.login_list_box.insert(tk.END, user)
         self.login_list_box.select_set(0)
         self.target = self.login_list_box.get(self.login_list_box.curselection())
 
-    # 3) main thread method:
     def send_message(self, data):
+        """"Send encoded message to server"""
         with self.lock:
             try:
                 self.sock.send(data)
