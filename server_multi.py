@@ -191,7 +191,7 @@ class ClientThread(threading.Thread):
             connection_queue.put(logins)
 
     def client_disconnected(self):
-        print(self.login + 'has disconnected.')
+        print('Client {} has disconnected.'.format(self.login))
         if self.login in self.master.login_list:
             del self.master.login_list[self.login]
         if self.socket in self.master.connection_list:
@@ -200,6 +200,7 @@ class ClientThread(threading.Thread):
             del self.master.message_queues[self.socket]
         self.socket.close()
         self.update_login_list()
+
 
 # Create new server with (IP, port)
 if __name__ == '__main__':
