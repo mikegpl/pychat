@@ -9,14 +9,12 @@ class Client(threading.Thread):
     def __init__(self, host, port):
         super().__init__(daemon=True, target=self.run)
 
-        # Socket variables
         self.host = host
         self.port = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((str(self.host), int(self.port)))
+        self.sock = None
+        self.connected = self.connect_to_server()
         self.buffer_size = 1024
         self.queue = queue.Queue()
-        self.gui = GUI(self)
 
         # Messaging variables
         self.login = ''
@@ -25,9 +23,20 @@ class Client(threading.Thread):
 
         # Threads
         self.lock = threading.RLock()
-        self.start()
-        self.gui.start()
-        # Only gui is non-daemon thread, so after closing gui app will quit
+        if self.connected:
+            self.gui = GUI(self)
+            self.start()
+            self.gui.start()
+            # Only gui is non-daemon thread, therefore after closing gui app will quit
+
+    def connect_to_server(self):
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((str(self.host), int(self.port)))
+        except ConnectionRefusedError:
+            print("Server is inactive, unable to connect")
+            return False
+        return True
 
     def run(self):
         """This method handles client-server communication using select module"""
