@@ -28,7 +28,8 @@ There are 3 server versions:
      * `server_select.py` - it has 1 thread which uses select.select()
   
 To exit client, simply click 'Exit' button or 'x' in upper right corner.  
-To exit server:
+
+To exit server: 
      * `server_multithreaded.py` and `server_multi.py` - type 'quit' in terminal, then press Enter
      * `server_select.py` - you need to use Ctrl+C in terminal (SIGINT)
      
