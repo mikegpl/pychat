@@ -3,25 +3,24 @@ import threading
 import queue
 import time
 
+ENCODING = 'utf-8'
+HOST = 'localhost'
+PORT = 8888
+
 
 class Server(threading.Thread):
     def __init__(self, host, port):
+        super().__init__(daemon=False, target=self.run)
 
-        # Main thread
-        super().__init__(daemon=False)
-
-        # Socket variables
         self.host = host
         self.port = port
         self.buffer_size = 2048
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        # Variables for processing connections
         self.connection_list = []
         self.login_list = {}
         self.queue = queue.Queue()
 
-        # Socket setup
         self.shutdown = False
         try:
             self.sock.bind((str(self.host), int(self.port)))
@@ -30,33 +29,28 @@ class Server(threading.Thread):
         except socket.error:
             self.shutdown = True
 
-        # Threads
         if not self.shutdown:
-            listener = threading.Thread(target=self.listen)
-            receiver = threading.Thread(target=self.receive)
-            sender = threading.Thread(target=self.send)
+            listener = threading.Thread(target=self.listen, daemon=True)
+            receiver = threading.Thread(target=self.receive, daemon=True)
+            sender = threading.Thread(target=self.send, daemon=True)
             self.lock = threading.RLock()
 
-            listener.daemon = True
             listener.start()
-            receiver.daemon = True
             receiver.start()
-            sender.daemon = True
             sender.start()
+            self.start()
 
-        # Main server loop
+    def run(self):
+        """Main thread method"""
+        print("Enter \'quit\' to exit")
         while not self.shutdown:
             message = input()
             if message == "quit":
                 self.sock.close()
                 self.shutdown = True
 
-        # End of __init__
-
-    # Methods used directly by threads
-    # 1) listener - self.listen()
-
     def listen(self):
+        """Listen for new connections"""
         print('Initiated listener thread')
         while True:
             try:
@@ -71,8 +65,8 @@ class Server(threading.Thread):
                 self.lock.release()
             time.sleep(0.050)
 
-    # 2) receiver - self.receive()
     def receive(self):
+        """Listen for new messages"""
         print('Initiated receiver thread')
         while True:
             if len(self.connection_list) > 0:
@@ -85,54 +79,10 @@ class Server(threading.Thread):
                     finally:
                         self.lock.release()
 
-                    # Process received data
-                    if data:
-                        message = data.decode('utf-8')
-                        # at most 4 splits (don't split the message if it contains ;)
-                        message = message.split(";", 3)
+                    self.process_data(data, connection)
 
-                        # Process messages
-                        # 1) new user logged in
-                        if message[0] == 'login':
-                            tmp_login = message[1]
-                            # if nickname already in use
-                            while message[1] in self.login_list:
-                                message[1] += '#'
-                            if tmp_login != message[1]:
-                                prompt = 'msg;server;' + message[1] + ';Login ' + tmp_login \
-                                         + ' already in use. Your login changed to ' + message[1] + '\n'
-                                self.queue.put((message[1], 'server', prompt.encode('utf-8')))
-
-                            self.login_list[message[1]] = connection
-                            print(message[1] + ' has logged in')
-
-                            # Update list of active users
-                            self.update_login_list()
-
-                        # 2) user logged out
-                        elif message[0] == 'logout':
-                            self.connection_list.remove(self.login_list[message[1]])
-                            if message[1] in self.login_list:
-                                del self.login_list[message[1]]
-                            print(message[1] + ' has logged out')
-
-                            # Update list of active users
-                            self.update_login_list()
-
-                        # 3) Message from one user to another (msg;origin;target;message)
-                        elif message[0] == 'msg' and message[2] != 'all':
-                            msg = data.decode('utf-8') + '\n'
-                            data = msg.encode('utf-8')
-                            self.queue.put((message[2], message[1], data))
-
-                        # 4) Message from one user to all users (msg;origin;all;message)
-                        elif message[0] == 'msg':
-                            msg = data.decode('utf-8') + '\n'
-                            data = msg.encode('utf-8')
-                            self.queue.put(('all', message[1], data))
-
-    # 3) sender - self.send()
     def send(self):
+        """Send messages from server's queue"""
         print('Initiated sender thread')
         while True:
             if not self.queue.empty():
@@ -145,11 +95,8 @@ class Server(threading.Thread):
             else:
                 time.sleep(0.05)
 
-    # Methods used by threads:
-    # 1) sending messages
-
-    # Send to all users except origin
     def send_to_all(self, origin, data):
+        """Send data to all users except origin"""
         if origin != 'server':
             origin_address = self.login_list[origin]
         else:
@@ -165,8 +112,8 @@ class Server(threading.Thread):
                 finally:
                     self.lock.release()
 
-    # Send to one user, specified as target
     def send_to_one(self, target, data):
+        """Send data to specified target"""
         target_address = self.login_list[target]
         try:
             self.lock.acquire()
@@ -176,8 +123,45 @@ class Server(threading.Thread):
         finally:
             self.lock.release()
 
-    # Remove connection if needed
+    def process_data(self, data, connection):
+        """Process received data"""
+        if data:
+            message = data.decode(ENCODING)
+            message = message.split(";", 3)
+
+            if message[0] == 'login':
+                tmp_login = message[1]
+
+                while message[1] in self.login_list:
+                    message[1] += '#'
+                if tmp_login != message[1]:
+                    prompt = 'msg;server;' + message[1] + ';Login ' + tmp_login \
+                             + ' already in use. Your login changed to ' + message[1] + '\n'
+                    self.queue.put((message[1], 'server', prompt.encode(ENCODING)))
+
+                self.login_list[message[1]] = connection
+                print(message[1] + ' has logged in')
+                self.update_login_list()
+
+            elif message[0] == 'logout':
+                self.connection_list.remove(self.login_list[message[1]])
+                if message[1] in self.login_list:
+                    del self.login_list[message[1]]
+                print(message[1] + ' has logged out')
+                self.update_login_list()
+
+            elif message[0] == 'msg' and message[2] != 'all':
+                msg = data.decode(ENCODING) + '\n'
+                data = msg.encode(ENCODING)
+                self.queue.put((message[2], message[1], data))
+
+            elif message[0] == 'msg':
+                msg = data.decode(ENCODING) + '\n'
+                data = msg.encode(ENCODING)
+                self.queue.put(('all', message[1], data))
+
     def remove_connection(self, connection):
+        """Remove connection from server's connection list"""
         self.connection_list.remove(connection)
         for login, address in self.login_list.items():
             if address == connection:
@@ -185,14 +169,15 @@ class Server(threading.Thread):
                 break
         self.update_login_list()
 
-    # Update list of logged in users
     def update_login_list(self):
+        """Update list of active users"""
         logins = 'login'
         for login in self.login_list:
             logins += ';' + login
         logins += ';all' + '\n'
-        self.queue.put(('all', 'server', logins.encode('utf-8')))
+        self.queue.put(('all', 'server', logins.encode(ENCODING)))
+
 
 # Create new server with (IP, port)
 if __name__ == '__main__':
-    server = Server('localhost', 8888)
+    server = Server(HOST, PORT)

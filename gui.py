@@ -3,6 +3,8 @@ import threading
 from tkinter import scrolledtext
 from tkinter import messagebox
 
+ENCODING = 'utf-8'
+
 
 class GUI(threading.Thread):
     def __init__(self, client):
@@ -20,23 +22,29 @@ class GUI(threading.Thread):
 
     @staticmethod
     def display_alert(message):
+        """Display alert box"""
         messagebox.showinfo('Error', message)
 
     def update_login_list(self, active_users):
+        """Update login list in main window with list of users"""
         self.main_window.update_login_list(active_users)
 
     def display_message(self, message):
+        """Display message in ChatWindow"""
         self.main_window.display_message(message)
 
     def send_message(self, message):
+        """Enqueue message in client's queue"""
         self.client.queue.put(message)
 
     def set_target(self, target):
+        """Set target for messages"""
         self.client.target = target
 
     def notify_server(self, message, action):
+        """Notify server after action was performed"""
         data = action + ";" + message
-        data = data.encode('utf-8')
+        data = data.encode(ENCODING)
         self.client.notify_server(data, action)
 
     def login(self, login):
@@ -67,31 +75,22 @@ class LoginWindow(Window):
         self.run()
 
     def build_window(self):
-        # Label
+        """Build login window, , set widgets positioning and event bindings"""
         self.label = tk.Label(self.root, text='Enter your login', width=20, font=self.font)
         self.label.pack(side=tk.LEFT, expand=tk.YES)
 
-        # Login entry field
         self.entry = tk.Entry(self.root, width=20, font=self.font)
         self.entry.focus_set()
         self.entry.pack(side=tk.LEFT)
         self.entry.bind('<Return>', self.get_login_event)
 
-        # Button for confirmation
         self.button = tk.Button(self.root, text='Login', font=self.font)
         self.button.pack(side=tk.LEFT)
         self.button.bind('<Button-1>', self.get_login_event)
 
     def run(self):
+        """Handle login window actions"""
         self.root.mainloop()
-        self.destroy_window()
-
-    def destroy_window(self):
-        # Clean bindings and close window
-        self.button.unbind('<Button-1>')
-        self.entry.unbind('<Return>')
-
-        # Close login window
         self.root.destroy()
 
     def get_login_event(self, event):
@@ -111,11 +110,12 @@ class ChatWindow(Window):
         self.exit_button = None
         self.lock = threading.RLock()
         self.target = ''
-        self.login = ''
+        self.login = self.gui.login_window.login
 
         self.build_window()
 
     def build_window(self):
+        """Build chat window, set widgets positioning and event bindings"""
         # Size config
         self.root.geometry('750x500')
         self.root.minsize(600, 400)
@@ -155,8 +155,6 @@ class ChatWindow(Window):
         self.messages_list.configure(state='disabled')
 
         # Listbox widget for displaying active users and selecting them
-        # selectmode = tk.SINGLE for choosing only one user at a time
-        # exportselection = False to enable highlighting login in list even if multiple clients are opened
         self.logins_list = tk.Listbox(frame01, selectmode=tk.SINGLE, font=self.font,
                                       exportselection=False)
         self.logins_list.bind('<<ListboxSelect>>', self.selected_login_event)
@@ -185,6 +183,7 @@ class ChatWindow(Window):
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing_event)
 
     def run(self):
+        """Handle chat window actions"""
         self.root.mainloop()
         self.root.destroy()
 
@@ -199,7 +198,8 @@ class ChatWindow(Window):
         text = self.entry.get(1.0, tk.END)
         if text != '\n':
             message = 'msg;' + self.login + ';' + self.target + ';' + text[:-1]
-            self.gui.send_message(message.encode('utf-8'))
+            print(message)
+            self.gui.send_message(message.encode(ENCODING))
             self.entry.mark_set(tk.INSERT, 1.0)
             self.entry.delete(1.0, tk.END)
             self.entry.focus_set()

@@ -4,6 +4,10 @@ import select
 import queue
 from gui import *
 
+ENCODING = 'utf-8'
+HOST = 'localhost'
+PORT = 8888
+
 
 class Client(threading.Thread):
     def __init__(self, host, port):
@@ -14,15 +18,14 @@ class Client(threading.Thread):
         self.sock = None
         self.connected = self.connect_to_server()
         self.buffer_size = 1024
-        self.queue = queue.Queue()
 
-        # Messaging variables
+        self.queue = queue.Queue()
+        self.lock = threading.RLock()
+
         self.login = ''
         self.target = ''
         self.login_list = []
 
-        # Threads
-        self.lock = threading.RLock()
         if self.connected:
             self.gui = GUI(self)
             self.start()
@@ -30,6 +33,7 @@ class Client(threading.Thread):
             # Only gui is non-daemon thread, therefore after closing gui app will quit
 
     def connect_to_server(self):
+        """Connect to server via socket interface, return (is_connected)"""
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((str(self.host), int(self.port)))
@@ -39,7 +43,7 @@ class Client(threading.Thread):
         return True
 
     def run(self):
-        """This method handles client-server communication using select module"""
+        """Handle client-server communication using select module"""
         inputs = [self.sock]
         outputs = [self.sock]
         while inputs:
@@ -81,32 +85,31 @@ class Client(threading.Thread):
     def process_received_data(self, data):
         """Process received message from server"""
         if data:
-            message = data.decode('utf-8')
+            message = data.decode(ENCODING)
             message = message.split('\n')
 
             for msg in message:
                 if msg != '':
                     msg = msg.split(';')
 
-                    # possible messages
-                    # 1) user to me
-                    # msg;user;me;message
                     if msg[0] == 'msg':
                         text = msg[1] + ' >> ' + msg[3] + '\n'
+                        print(msg)
                         self.gui.display_message(text)
 
                         # if chosen login is already in use
                         if msg[2] != self.login and msg[2] != 'ALL':
                             self.login = msg[2]
 
-                    # 2) server to me, updating login list
-                    # login;l1;l2;l3;ALL
                     elif msg[0] == 'login':
                         self.gui.main_window.update_login_list(msg[1:])
 
-    def notify_server(self, action, type):
+    def notify_server(self, action, action_type):
+        """Notify server if action is performed by client"""
         self.queue.put(action)
-        if type == "logout":
+        if action_type == "login":
+            self.login = action.decode(ENCODING).split(';')[1]
+        elif action_type == "logout":
             self.sock.close()
 
     def send_message(self, data):
@@ -121,4 +124,4 @@ class Client(threading.Thread):
 
 # Create new client with (IP, port)
 if __name__ == '__main__':
-    Client('localhost', 8888)
+    Client(HOST, PORT)

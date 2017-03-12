@@ -1,5 +1,5 @@
 # PythonChat    
-## Simple chat in Python with Tkinter GUI on client side. 
+### Simple chat in Python with Tkinter GUI on client side. 
 
 ## Getting started
 
@@ -31,6 +31,17 @@ To exit server:
      * `server_multithreaded.py` and `server_multi.py` - type 'quit' in terminal, then press Enter     
      * `server_select.py` - you need to use Ctrl+C in terminal (SIGINT)
      
+
+### Messaging protocol
+
+This server uses simple communication protocol, which is as following:
+
+* template: `action_type;origin;target;message_contents`
+* user1 sends message to user2: `msg;user1;user2;message_contents`
+* user sends message to all users: `msg;user;ALL;message_contents`
+* user logs in or out: `login;user` / `logout;user`
+* server notifies users about changes in login list `login;user1;user2;user3;[...];ALL`
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
